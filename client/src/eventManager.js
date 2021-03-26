@@ -1,0 +1,73 @@
+import { constants } from "./constants.js";
+
+export default class EventManager
+{
+    #allUsers = new Map();
+
+    constructor({ componentEmitter, socketClient })
+    {
+        this.componentEmitter = componentEmitter;
+        this.socketClient = socketClient;
+    }
+    // Aguarda para receber mensagens assim que entra na sala
+    joinRoomAndWaitForMessage(data)
+    {
+        this.socketClient.sendMessage(constants.events.socket.JOIN_ROOM, data);
+
+        this.componentEmitter.on(constants.events.app.MESSAGE_SENT, msg => {
+            this.socketClient.sendMessage(constants.events.socket.MESSAGE, msg);
+        });
+    }
+
+    updateUsers(users)
+    {
+        const connectedUsers = users;
+        // para saber quais usuários estão conectados
+        connectedUsers.forEach(({ id, userName }) => this.#allUsers.set(id, userName));
+        this.#updateUsersComponent()
+    }
+
+    newUserConnected(message)
+    {
+        const user = message;
+        this.#allUsers.set(user.id, user.userName);
+        this.#updateUsersComponent();
+
+        this.#updateActivityLogComponent(`${user.userName} joined`);
+    }
+
+    #updateActivityLogComponent(message)
+    {
+        this.#emitComponentUpdate(
+            constants.events.app.ACTIVITYLOG_UPDATED,
+            message
+        );
+    }
+
+    #emitComponentUpdate(event, message)
+    {
+        this.componentEmitter.emit(
+            event,
+            message
+        );
+    }
+    #updateUsersComponent()
+    {
+        this.#emitComponentUpdate(
+            constants.events.app.STATUS_UPDATED,
+            Array.from(this.#allUsers.values())
+        );
+    }
+
+    getEvents()
+    {
+        // pega todas as funções da classe
+        // Lê o prototype para pegar o nome de cada uma das funções públicas
+        // o bind é para continuar com o contexto da classe
+        const functions = Reflect.ownKeys(EventManager.prototype)
+            .filter(fn => fn !== 'constructor')
+            .map(name => [name, this[name].bind(this)]); // retorna um objeto estilo Map
+
+        return new Map(functions);
+    }
+}
